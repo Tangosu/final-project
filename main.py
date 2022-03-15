@@ -1,79 +1,112 @@
 import cv2
-import math
 import detection
 
-capture = cv2.VideoCapture('S10_Switronic_Short_Cut_Test.mp4')
+v='assets/staircase.mp4'
+capture = cv2.VideoCapture(v)
 ret, frame1 = capture.read()
-ret, frame2 = capture.read()
 
-prev_mid_pts = []
+# picture we are looking for
+bl = cv2.imread('assets/bl.png', 0)
+br = cv2.imread('assets/br2.png', 0)
+c = cv2.imread('assets/c.png', 0)
+rr = cv2.imread('assets/rr.png', 0)
+rl = cv2.imread('assets/rl.png', 0)
+
+# arrow axis on roi
+bl_axis = 20
+rl_axis = 70
+c_axis = 120
+rr_axis = 175
+br_axis = 230
+
+prev_co = []
 track_obj = {}
 unique_obj = []
 track_id = 0
+x = 490
+y = 320
 
 while True:
-    _, frame = capture.read()
+    ret, frame = capture.read()
 
-    curr_mid_pts = []
-    contours, _ = detection.cont(frame1, frame2)
+    if ret == True:
 
-    # Highlights the arrows in a green square on the bottom right of the screen
-    for c in contours:
-        if cv2.contourArea(c) < 10000 and cv2.contourArea(c) > 4000:
-            (x, y, w, h) = cv2.boundingRect(c)
+        current_co = []
+        img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # Hard coded values for bottom right of the screen
-            if y > 325 and (x > 510 and x < 810):
-                cv2.rectangle(frame1, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        # detection for arrows
+        left_blue = detection.search(img, bl, bl_axis)
+        left_red = detection.search(img, rl, rl_axis)
+        centre = detection.search(img, c, c_axis)
+        right_red = detection.search(img, rr, rr_axis)
+        right_blue = detection.search(img, br, br_axis)
 
-                # mid point of the contour
-                xMid = int((x + x + w) / 2)
-                yMid = int((y + y + h) / 2)
-                curr_mid_pts.append((xMid, yMid))
+        # adds the co-ordinates of the arrow to current array
+        if left_blue is not None:
+            current_co.append(left_blue)
+        if left_red is not None:
+            current_co.append(left_red)
+        if centre is not None:
+            current_co.append(centre)
+        if right_red is not None:
+            current_co.append(right_red)
+        if right_blue is not None:
+            current_co.append(right_blue)
 
-    if len(track_obj) < 1:
-        # Compares the current mid point of the contour to the previous mid point.
-        # If the distance of the mid point is close (within 36 pxl), the current mid point will be
+        # Compares the current co-ordinate of the arrow to the previous co-ordinate.
+        # If the distance of the mid point is close (within 25 pxl), the current co-ordinate will be
         # added to the track_obj dictionary. This is used as a way to track a unique moving object
-        for i in curr_mid_pts:
-            for j in prev_mid_pts:
-                dist = math.hypot(j[0] - i[0], j[1] - i[1])
-                if dist < 36:
-                    track_obj[track_id] = i
-                    track_id += 1
+        if len(track_obj) < 1:
+            for i in range(len(prev_co)):
+                if len(current_co) == len(prev_co):
+                    dist = prev_co[i][1]-current_co[i][1]
+                    if dist < 25 and dist > 0:
+                        track_obj[track_id] = current_co
+                        track_id += 1
+
+        # Checks a copy of the track_obj dictionary and checks if the current co-ordinate is already in it.
+        else:
+            for j, k in track_obj.copy().items():
+                obj_exist = False
+                for i in current_co:
+                    dist = k[0][1] - i[1]
+                    if dist < 25 and dist > 0:
+                        track_obj[j] = [i]
+                        obj_exist = True
+                        continue
+                # If not, it will add it to the unique_obj array.
+                if not obj_exist:
+                    track_obj.pop(j)
+                    unique_obj.append(k)
+
+        prev_co = current_co.copy()
+        cv2.imshow('PIU', img)
+        if cv2.waitKey(1) == 27:
+            break
     else:
-        # Checks a copy of the track_obj dictionary and checks if the current mid point is already in it.
-        # If not, it will add it to the unique_obj array.
-        for j, k in track_obj.copy().items():
-            obj_exist = False
-
-            for i in curr_mid_pts:
-                dist = math.hypot(k[0] - i[0], k[1] - i[1])
-
-                if dist < 36:
-                    track_obj[j] = i
-                    obj_exist = True
-                    continue
-
-            if not obj_exist:
-                track_obj.pop(j)
-                unique_obj.append(k)
-
-    # A visual of the number of moving objects
-    for i, j in track_obj.items():
-        cv2.putText(frame1, str(i), (j[0], j[1]-7), 2, 1, (255, 0, 255))
-
-    print(len(unique_obj))
-
-    cv2.imshow('PIU', frame1)
-
-    frame1 = frame2
-    prev_mid_pts = curr_mid_pts.copy()
-    ret, frame2 = capture.read()
-
-    if cv2.waitKey(120) == 27:
         break
 
 capture.release()
 cv2.destroyAllWindows()
+
+# print(unique_obj)
+
+
+# Show the arrow sequence in an array
+new_arr = []
+for i in unique_obj:
+    if i[0][0] > 20 < 60:
+        new_arr.append("LB")
+    if i[0][0] > 70 < 110:
+        new_arr.append("LR")
+    if i[0][0] > 120 < 170:
+        new_arr.append("C")
+    if i[0][0] > 175 < 220:
+        new_arr.append("RR")
+    if i[0][0] > 230 < 270:
+        new_arr.append("RB")
+
+print(new_arr)
+
+
 
